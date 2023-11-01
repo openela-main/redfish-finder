@@ -1,0 +1,70 @@
+commit 74c305647c892b9035332aaf179d11544104caba
+Author: Adrian Huang <ahuang12@lenovo.com>
+Date:   Thu Jul 11 15:50:40 2019 +0800
+
+    Fix the exception if hostname is empty
+    
+    Redfish Host Interface Specification [1] defines the field "Redfish
+    Service Hostname" as "Varies", which means it can be empty. Moreover,
+    this field is not mandatory for well-defined configuration (a valid
+    string).
+    
+    The original design assumes that this field is the non-empty string
+    shown as follows:
+    
+    -------------------------------------------------------------------
+            self.hostname = cursor.split()[0]
+    -------------------------------------------------------------------
+    
+    This leads to the exception, and the "self.hostname" is not configured.
+    Here is the error output:
+    
+    -------------------------------------------------------------------
+    redfish-finder: Getting dmidecode info
+    redfish-finder: Unexpected error parsing ServiceConfig
+    redfish-finder: Building NetworkManager connection info
+    redfish-finder: Obtaining OS config info
+    redfish-finder: Converting SMBIOS Host Config to NetworkManager Connection info
+    redfish-finder: Applying NetworkManager connection configuration changes
+    Error: 'enp6s0f3u2u3c2' is not an active connection.
+    Error: no active connection provided.
+    Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/5)
+    redfish-finder: Adding redfish host info to OS config
+    Traceback (most recent call last):
+      File "./redfish-finder", line 526, in <module>
+        main()
+      File "./redfish-finder", line 520, in main
+        svc.update_redfish_info()
+      File "./redfish-finder", line 349, in update_redfish_info
+        if h.find(self.sconf.hostname) != -1:
+    AttributeError: ServiceConfig instance has no attribute 'hostname'
+    -------------------------------------------------------------------
+    
+    This patch fixes the above-mentioned issue accordingly.
+    
+    [1] https://www.dmtf.org/sites/default/files/standards/documents/DSP0270_1.1.0.pdf
+    
+    Signed-off-by: Adrian Huang <ahuang12@lenovo.com>
+
+diff --git a/redfish-finder b/redfish-finder
+index 429cc42..c2cba75 100755
+--- a/redfish-finder
++++ b/redfish-finder
+@@ -235,7 +235,16 @@ class ServiceConfig():
+ 			cursor = cursor_consume_next(cursor, "Redfish Service Vlan: ")
+ 			self.vlan = int(cursor.split()[0])
+ 			cursor = cursor_consume_next(cursor, "Redfish Service Hostname: ")
+-			self.hostname = cursor.split()[0]
++
++			#
++			# Sanity check: If it contains the consecutive spaces
++			# only, reference to the index '0' will throw an
++			# exception.
++			#
++			if len(cursor.split()) != 0:
++				self.hostname = cursor.split()[0]
++			else:
++				self.hostname = ""
+ 		except:
+ 			print("redfish-finder: Unexpected error parsing ServiceConfig")
+ 
